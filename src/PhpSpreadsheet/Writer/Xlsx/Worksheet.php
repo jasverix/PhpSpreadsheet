@@ -264,11 +264,21 @@ class Worksheet extends WriterPart
         $objWriter->writeAttribute('workbookViewId', '0');
 
         // Zoom scales
-        if ($worksheet->getSheetView()->getZoomScale() != 100) {
-            $objWriter->writeAttribute('zoomScale', (string) $worksheet->getSheetView()->getZoomScale());
+        $zoomScale = $worksheet->getSheetView()->getZoomScale();
+        if ($zoomScale !== 100 && $zoomScale !== null) {
+            $objWriter->writeAttribute('zoomScale', (string) $zoomScale);
         }
-        if ($worksheet->getSheetView()->getZoomScaleNormal() != 100) {
-            $objWriter->writeAttribute('zoomScaleNormal', (string) $worksheet->getSheetView()->getZoomScaleNormal());
+        $zoomScale = $worksheet->getSheetView()->getZoomScaleNormal();
+        if ($zoomScale !== 100 && $zoomScale !== null) {
+            $objWriter->writeAttribute('zoomScaleNormal', (string) $zoomScale);
+        }
+        $zoomScale = $worksheet->getSheetView()->getZoomScalePageLayoutView();
+        if ($zoomScale !== 100) {
+            $objWriter->writeAttribute('zoomScalePageLayoutView', (string) $zoomScale);
+        }
+        $zoomScale = $worksheet->getSheetView()->getZoomScaleSheetLayoutView();
+        if ($zoomScale !== 100) {
+            $objWriter->writeAttribute('zoomScaleSheetLayoutView', (string) $zoomScale);
         }
 
         // Show zeros (Excel also writes this attribute only if set to false)
@@ -974,19 +984,20 @@ class Worksheet extends WriterPart
      */
     private function writeProtectedRanges(XMLWriter $objWriter, PhpspreadsheetWorksheet $worksheet): void
     {
-        if (count($worksheet->getProtectedCells()) > 0) {
+        if (count($worksheet->getProtectedCellRanges()) > 0) {
             // protectedRanges
             $objWriter->startElement('protectedRanges');
 
             // Loop protectedRanges
-            foreach ($worksheet->getProtectedCells() as $protectedCell => $passwordHash) {
+            foreach ($worksheet->getProtectedCellRanges() as $protectedCell => $protectedRange) {
                 // protectedRange
                 $objWriter->startElement('protectedRange');
-                $objWriter->writeAttribute('name', 'p' . md5($protectedCell));
+                $objWriter->writeAttribute('name', $protectedRange->getName());
                 $objWriter->writeAttribute('sqref', $protectedCell);
-                if (!empty($passwordHash)) {
-                    $objWriter->writeAttribute('password', $passwordHash);
-                }
+                $passwordHash = $protectedRange->getPassword();
+                $this->writeAttributeIf($objWriter, $passwordHash !== '', 'password', $passwordHash);
+                $securityDescriptor = $protectedRange->getSecurityDescriptor();
+                $this->writeAttributeIf($objWriter, $securityDescriptor !== '', 'securityDescriptor', $securityDescriptor);
                 $objWriter->endElement();
             }
 
@@ -1209,7 +1220,7 @@ class Worksheet extends WriterPart
             $objWriter->writeAttribute('manualBreakCount', (string) count($aColumnBreaks));
 
             foreach ($aColumnBreaks as $cell => $break) {
-                $coords = Coordinate::coordinateFromString($cell);
+                $coords = Coordinate::indexesFromString($cell);
 
                 $objWriter->startElement('brk');
                 $objWriter->writeAttribute('id', (string) ((int) $coords[0] - 1));

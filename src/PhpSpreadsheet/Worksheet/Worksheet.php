@@ -192,7 +192,7 @@ class Worksheet implements IComparable
     /**
      * Collection of protected cell ranges.
      *
-     * @var string[]
+     * @var ProtectedRange[]
      */
     private array $protectedCells = [];
 
@@ -1866,14 +1866,14 @@ class Worksheet implements IComparable
      *
      * @return $this
      */
-    public function protectCells(AddressRange|CellAddress|int|string|array $range, string $password, bool $alreadyHashed = false): static
+    public function protectCells(AddressRange|CellAddress|int|string|array $range, string $password = '', bool $alreadyHashed = false, string $name = '', string $securityDescriptor = ''): static
     {
         $range = Functions::trimSheetFromCellReference(Validations::validateCellOrCellRange($range));
 
-        if (!$alreadyHashed) {
+        if (!$alreadyHashed && $password !== '') {
             $password = Shared\PasswordHasher::hashPassword($password);
         }
-        $this->protectedCells[$range] = $password;
+        $this->protectedCells[$range] = new ProtectedRange($range, $password, $name, $securityDescriptor);
 
         return $this;
     }
@@ -1901,11 +1901,29 @@ class Worksheet implements IComparable
     }
 
     /**
-     * Get protected cells.
+     * Get password for protected cells.
      *
      * @return string[]
+     *
+     * @deprecated 2.0.1 use getProtectedCellRanges instead
+     * @see Worksheet::getProtectedCellRanges()
      */
     public function getProtectedCells(): array
+    {
+        $array = [];
+        foreach ($this->protectedCells as $key => $protectedRange) {
+            $array[$key] = $protectedRange->getPassword();
+        }
+
+        return $array;
+    }
+
+    /**
+     * Get protected cells.
+     *
+     * @return ProtectedRange[]
+     */
+    public function getProtectedCellRanges(): array
     {
         return $this->protectedCells;
     }
@@ -2608,7 +2626,7 @@ class Worksheet implements IComparable
      * @param array{0: int, 1: int}|CellAddress|string $cellCoordinate Coordinate of the cell as a string, eg: 'C5';
      *               or as an array of [$columnIndex, $row] (e.g. [3, 5]), or a CellAddress object.
      */
-    public function getComment(CellAddress|string|array $cellCoordinate): Comment
+    public function getComment(CellAddress|string|array $cellCoordinate, bool $attachNew = true): Comment
     {
         $cellAddress = Functions::trimSheetFromCellReference(Validations::validateCellAddress($cellCoordinate));
 
@@ -2627,7 +2645,9 @@ class Worksheet implements IComparable
 
         // If not, create a new comment.
         $newComment = new Comment();
-        $this->comments[$cellAddress] = $newComment;
+        if ($attachNew) {
+            $this->comments[$cellAddress] = $newComment;
+        }
 
         return $newComment;
     }
@@ -2842,7 +2862,7 @@ class Worksheet implements IComparable
      * @param bool $ignoreHidden False - Return values for rows/columns even if they are defined as hidden.
      *                            True - Don't return values for rows/columns that are defined as hidden.
      *
-     * @return Generator
+     * @return Generator<array>
      */
     public function rangeToArrayYieldRows(
         string $range,
